@@ -308,6 +308,7 @@ body.drawer-open .style-tab{background:var(--teal-wash);color:var(--teal-deep);b
   <button class="btn ghost hide-t" data-act="reset"><svg class="i" viewBox="0 0 24 24"><path d="M4 5v5h5"/><path d="M5.5 15.5A7.5 7.5 0 1 0 6 8.5L4 10"/></svg>Start over</button>
 
   <button class="btn primary" data-act="print"><svg class="i" viewBox="0 0 24 24"><path d="M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2"/><path d="M7 14h10v6H7z"/></svg><span class="lbl-long">Save as PDF</span><span class="lbl-short">PDF</span></button>
+  <button class="btn primary" data-act="jpeg" title="Save as a maximum-quality JPEG"><svg class="i" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4"/></svg><span class="lbl-long">Save as JPEG</span><span class="lbl-short">JPEG</span></button>
   <input type="file" id="file" accept=".json,application/json" hidden>
 </header>
 
@@ -695,6 +696,7 @@ document.addEventListener('click',e=>{
       confirm2('Delete "' + (secs[s].items[i].name||'this dish') + '"?', ()=>{secs[s].items.splice(i,1);buildSections();renderPage()}, 'Delete');
       return;
     case 'print': rebuild=false; savePDF(); return;
+    case 'jpeg': rebuild=false; saveJPEG(); return;
     case 'save': rebuild=false; saveFile(); break;
     case 'open': rebuild=false; $('#file').click(); break;
     case 'reset':
@@ -771,20 +773,82 @@ $('#mdl-yes').addEventListener('click',()=>{$('#mdl').hidden=true;$('#mdl')._yes
 $('#mdl').addEventListener('click',e=>{if(e.target===$('#mdl'))$('#mdl').hidden=true});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#mdl').hidden){$('#mdl').hidden=true;return}});
 
-/* ---------- Save PDF ---------- */
-async function savePDF(){
-  // Try downloads capability (works in published artifact)
-  const dl=await window.claude?.use?.('downloads').catch(()=>null);
-  if(dl){
-    try{
-      const {default:htm}=await new Promise(r=>r({default:document.documentElement.outerHTML}));
-      // Use print-to-PDF via the page itself — trigger print
-      window.print(); return;
-    }catch(e){}
-  }
-  // Published: use print dialog (works outside Claude iframe)
-  window.print();
+/* ---------- Export: exact A5 PDF + max-quality JPEG ---------- */
+const A5_MM=[148,210], EXPORT_SCALE=4;           // 4x => ~2236 x 3175 px (about 380 dpi on A5)
+function fileBase(){
+  const el=document.getElementById('t-title');const t=(el&&el.value)||'menu';
+  return String(t).trim().replace(/[^\w\-]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase()||'menu';
 }
+function toast2(msg){const t=document.querySelector('.toast'); if(t){t.textContent=msg;t.classList&&t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}}
+async function renderPageCanvas(scale){
+  if(document.fonts&&document.fonts.ready)await document.fonts.ready;
+  const page=document.getElementById('page');
+  const w=page.offsetWidth, h=page.offsetHeight;
+  const clone=page.cloneNode(true);
+  clone.removeAttribute('id');
+  clone.style.position='relative';clone.style.top='0';clone.style.left='0';clone.style.transform='none';clone.style.boxShadow='none';clone.style.margin='0';clone.style.width=w+'px';clone.style.height=h+'px';
+  const css=Array.from(document.querySelectorAll('style')).map(st=>st.textContent).join('\n');
+  const body=new XMLSerializer().serializeToString(clone);
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+w*scale+'" height="'+h*scale+'" viewBox="0 0 '+w+' '+h+'">'+
+    '<foreignObject width="'+w+'" height="'+h+'"><div xmlns="http://www.w3.org/1999/xhtml" style="width:'+w+'px;height:'+h+'px;background:#fff">'+
+    '<style>'+css.replace(/]]>/g,']]&gt;')+'</style>'+body+'</div></foreignObject></svg>';
+  const url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+  const img=new Image(); img.decoding='sync';
+  await new Promise((res,rej)=>{img.onload=res;img.onerror=()=>rej(new Error('render failed'));img.src=url});
+  const cv=document.createElement('canvas');
+  cv.width=Math.round(w*scale); cv.height=Math.round(h*scale);
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,cv.width,cv.height);   // JPEG has no transparency
+  ctx.imageSmoothingQuality='high';
+  ctx.drawImage(img,0,0,cv.width,cv.height);
+  return cv;
+}
+function canvasToJpegBlob(cv){return new Promise(r=>cv.toBlob(r,'image/jpeg',1.0))}
+function downloadBlob(blob,name){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+/* Minimal PDF writer: one page, exactly 148 x 210 mm, the JPEG placed full-bleed (no margins, no scaling). */
+function jpegToA5Pdf(jpegBytes,pxW,pxH){
+  const W=148/25.4*72, H=210/25.4*72, f=n=>n.toFixed(2);
+  const enc=new TextEncoder(), parts=[], offs=[]; let len=0;
+  const push=x=>{const u=typeof x==='string'?enc.encode(x):x; parts.push(u); len+=u.length};
+  const obj=(n,body)=>{offs[n]=len; push(n+' 0 obj\n'+body+'\nendobj\n')};
+  push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+  obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+f(W)+' '+f(H)+'] /CropBox [0 0 '+f(W)+' '+f(H)+'] /TrimBox [0 0 '+f(W)+' '+f(H)+'] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
+  offs[4]=len;
+  push('4 0 obj\n<< /Type /XObject /Subtype /Image /Width '+pxW+' /Height '+pxH+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+jpegBytes.length+' >>\nstream\n');
+  push(jpegBytes); push('\nendstream\nendobj\n');
+  const content='q '+f(W)+' 0 0 '+f(H)+' 0 0 cm /Im0 Do Q';
+  obj(5,'<< /Length '+content.length+' >>\nstream\n'+content+'\nendstream');
+  obj(6,'<< /Title (Menu) /Producer (B-Heaven Menu Studio) >>');
+  const xref=len; let x='xref\n0 7\n0000000000 65535 f \n';
+  for(let i=1;i<=6;i++)x+=String(offs[i]).padStart(10,'0')+' 00000 n \n';
+  push(x+'trailer\n<< /Size 7 /Root 1 0 R /Info 6 0 R >>\nstartxref\n'+xref+'\n%%EOF');
+  return new Blob(parts,{type:'application/pdf'});
+}
+let exporting=false;
+async function runExport(kind){
+  if(exporting)return; exporting=true;
+  const btns=document.querySelectorAll('[data-act="print"],[data-act="jpeg"]'); btns.forEach(b=>b.disabled=true);
+  try{
+    const cv=await renderPageCanvas(EXPORT_SCALE);
+    const jpg=await canvasToJpegBlob(cv);
+    if(kind==='jpeg'){ downloadBlob(jpg,fileBase()+'-A5.jpg'); }
+    else{
+      const bytes=new Uint8Array(await jpg.arrayBuffer());
+      downloadBlob(jpegToA5Pdf(bytes,cv.width,cv.height),fileBase()+'-A5.pdf');
+    }
+  }catch(e){
+    console.error(e);
+    if(kind==='print'){ window.print(); }          // fall back to the browser print dialog (A5 @page is set)
+    else alert('Sorry, the JPEG could not be created in this browser. Try Chrome or Edge.');
+  }finally{ exporting=false; btns.forEach(b=>b.disabled=false); }
+}
+function savePDF(){return runExport('print')}
+function saveJPEG(){return runExport('jpeg')}
 
 buildDesigns(); syncControls(); renderPage(); fit();
 </script>
