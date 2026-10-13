@@ -37,6 +37,8 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .btn.ghost:hover{background:var(--mist);color:var(--ink)}
 #styleBtn[aria-expanded="true"]{background:var(--teal-wash);color:var(--teal-deep);border:1px solid #B9D3D1}
 .btn.primary{background:var(--ink);color:#fff}
+.qsel{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--soft)}
+.qsel select{min-height:34px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font:inherit;font-weight:500;padding:0 8px}
 .btn.primary:hover{background:var(--teal-deep)}
 .lbl-short{display:none}
 
@@ -306,6 +308,9 @@ body.drawer-open .style-tab{background:var(--teal-wash);color:var(--teal-deep);b
   <div class="brand"><b>menu studio</b><span>B·Heaven by Barceló</span></div>
   <div class="grow"></div>
   <button class="btn ghost hide-t" data-act="reset"><svg class="i" viewBox="0 0 24 24"><path d="M4 5v5h5"/><path d="M5.5 15.5A7.5 7.5 0 1 0 6 8.5L4 10"/></svg>Start over</button>
+  <button class="btn ghost hide-t" data-act="open" title="Open a saved menu draft (.json)"><svg class="i" viewBox="0 0 24 24"><path d="M3.5 7.5a1.5 1.5 0 0 1 1.5-1.5h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5z"/></svg>Open draft</button>
+  <button class="btn ghost hide-t" data-act="save" title="Save this menu as a draft file you can reopen later"><svg class="i" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg>Save draft</button>
+  <label class="qsel hide-t" for="jq" title="JPEG size"><span>JPEG</span><select id="jq"><option value="high">High · 2236 px</option><option value="std">Standard · 1118 px</option></select></label>
 
   <button class="btn primary" data-act="print"><svg class="i" viewBox="0 0 24 24"><path d="M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2"/><path d="M7 14h10v6H7z"/></svg><span class="lbl-long">Save as PDF</span><span class="lbl-short">PDF</span></button>
   <button class="btn primary" data-act="jpeg" title="Save as a maximum-quality JPEG"><svg class="i" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4"/></svg><span class="lbl-long">Save as JPEG</span><span class="lbl-short">JPEG</span></button>
@@ -719,7 +724,7 @@ function saveFile(){
   const blob=new Blob([data],{type:'application/json'});
   const a=document.createElement('a');
   const first=(state.sections[0]?.items[0]?.name||'menu').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
-  a.href=URL.createObjectURL(blob); a.download=`bheaven-menu-${first||'menu'}.json`;
+  a.href=URL.createObjectURL(blob); a.download=`${fileBase()}-draft.json`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
   toast('Menu file saved to your downloads');
@@ -776,8 +781,11 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#mdl').hidden){
 /* ---------- Export: exact A5 PDF + max-quality JPEG ---------- */
 const A5_MM=[148,210], EXPORT_SCALE=4;           // 4x => ~2236 x 3175 px (about 380 dpi on A5)
 function fileBase(){
-  const el=document.getElementById('t-title');const t=(el&&el.value)||'menu';
-  return String(t).trim().replace(/[^\w\-]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase()||'menu';
+  const slug=t=>String(t||'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  const title=(document.getElementById('t-title')||{}).value, sub=(document.getElementById('t-sub')||{}).value;
+  const name=slug([title,sub].filter(Boolean).join(' '))||slug(state.sections[0]&&state.sections[0].items[0]&&state.sections[0].items[0].name)||'menu';
+  const d=new Date(), p=n=>String(n).padStart(2,'0');
+  return name+'-'+d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
 }
 function toast2(msg){const t=document.querySelector('.toast'); if(t){t.textContent=msg;t.classList&&t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}}
 async function renderPageCanvas(scale){
@@ -803,7 +811,7 @@ async function renderPageCanvas(scale){
   ctx.drawImage(img,0,0,cv.width,cv.height);
   return cv;
 }
-function canvasToJpegBlob(cv){return new Promise(r=>cv.toBlob(r,'image/jpeg',1.0))}
+function canvasToJpegBlob(cv,q){return new Promise(r=>cv.toBlob(r,'image/jpeg',q==null?1.0:q))}
 function downloadBlob(blob,name){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
@@ -834,8 +842,9 @@ async function runExport(kind){
   if(exporting)return; exporting=true;
   const btns=document.querySelectorAll('[data-act="print"],[data-act="jpeg"]'); btns.forEach(b=>b.disabled=true);
   try{
-    const cv=await renderPageCanvas(EXPORT_SCALE);
-    const jpg=await canvasToJpegBlob(cv);
+    const std=kind==='jpeg'&&(document.getElementById('jq')||{}).value==='std';
+    const cv=await renderPageCanvas(std?EXPORT_SCALE/2:EXPORT_SCALE);
+    const jpg=await canvasToJpegBlob(cv,std?0.92:1.0);
     if(kind==='jpeg'){ downloadBlob(jpg,fileBase()+'-A5.jpg'); }
     else{
       const bytes=new Uint8Array(await jpg.arrayBuffer());
@@ -849,6 +858,27 @@ async function runExport(kind){
 }
 function savePDF(){return runExport('print')}
 function saveJPEG(){return runExport('jpeg')}
+
+
+/* ---------- Autosave: the menu comes back after a refresh or closed tab ---------- */
+const DRAFT_KEY='bheaven-menu-studio-draft-v1';
+function loadData(data){
+  const base=clone(SAMPLE);
+  state={...base,...data,style:{...base.style,...(data.style||{})}};
+  state.sections.forEach(s=>{s.collapsed=true;s.or=!!s.or;s.items.forEach(it=>{it.al=it.al||[]})});
+  if(!DESIGNS[state.style.design])Object.assign(state.style,DESIGNS.classic.preset,{design:'classic'});
+}
+let autoT;
+function queueAutosave(){
+  clearTimeout(autoT);
+  autoT=setTimeout(()=>{try{localStorage.setItem(DRAFT_KEY,JSON.stringify(state,(k,v)=>k==='collapsed'?undefined:v))}catch(e){}},400);
+}
+const _renderPage=renderPage;
+renderPage=function(){const r=_renderPage.apply(this,arguments);queueAutosave();return r};
+try{
+  const saved=localStorage.getItem(DRAFT_KEY);
+  if(saved){const d=JSON.parse(saved); if(d&&Array.isArray(d.sections)){loadData(d);setTimeout(()=>toast('Restored your last menu'),600)}}
+}catch(e){}
 
 buildDesigns(); syncControls(); renderPage(); fit();
 </script>
