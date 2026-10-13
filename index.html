@@ -38,7 +38,7 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 #styleBtn[aria-expanded="true"]{background:var(--teal-wash);color:var(--teal-deep);border:1px solid #B9D3D1}
 .btn.primary{background:var(--ink);color:#fff}
 .qsel{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--soft)}
-.qsel select{min-height:34px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font:inherit;font-weight:500;padding:0 8px}
+.qsel select{flex:none;min-width:92px;min-height:34px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font:inherit;font-weight:500;padding:0 8px}
 .btn.primary:hover{background:var(--teal-deep)}
 .lbl-short{display:none}
 
@@ -178,7 +178,8 @@ body.drawer-open .drawer{width:320px}
 
 /* ---------- Responsive ---------- */
 @media (max-width:1380px){.app{grid-template-columns:420px minmax(0,1fr)}}
-@media (max-width:1100px){.brand span{display:none}}
+@media (max-width:1100px){.brand span{display:none}.qsel span{display:none}.top .btn.ghost.hide-t{padding:0 10px}}
+@media (max-width:899px){.dl{display:none}.top .btn.ghost.hide-t{padding:0 10px}.qsel span{display:none}}
 @media (max-width:899px){
   .pane{max-width:640px;margin:0 auto}
   .work{flex-direction:column}
@@ -308,9 +309,9 @@ body.drawer-open .style-tab{background:var(--teal-wash);color:var(--teal-deep);b
   <div class="brand"><b>menu studio</b><span>B·Heaven by Barceló</span></div>
   <div class="grow"></div>
   <button class="btn ghost hide-t" data-act="reset"><svg class="i" viewBox="0 0 24 24"><path d="M4 5v5h5"/><path d="M5.5 15.5A7.5 7.5 0 1 0 6 8.5L4 10"/></svg>Start over</button>
-  <button class="btn ghost hide-t" data-act="open" title="Open a saved menu draft (.json)"><svg class="i" viewBox="0 0 24 24"><path d="M3.5 7.5a1.5 1.5 0 0 1 1.5-1.5h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5z"/></svg>Open draft</button>
-  <button class="btn ghost hide-t" data-act="save" title="Save this menu as a draft file you can reopen later"><svg class="i" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg>Save draft</button>
-  <label class="qsel hide-t" for="jq" title="JPEG size"><span>JPEG</span><select id="jq"><option value="high">High · 2236 px</option><option value="std">Standard · 1118 px</option></select></label>
+  <button class="btn ghost hide-t" data-act="open" title="Open a saved menu draft (.json)"><svg class="i" viewBox="0 0 24 24"><path d="M3.5 7.5a1.5 1.5 0 0 1 1.5-1.5h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5z"/></svg><span class="dl">Open draft</span></button>
+  <button class="btn ghost hide-t" data-act="save" title="Save this menu as a draft file you can reopen later"><svg class="i" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg><span class="dl">Save draft</span></button>
+  <label class="qsel hide-t" for="jq" title="JPEG size: High is 2236 px wide, Standard is 1118 px"><span>JPEG</span><select id="jq" aria-label="JPEG size"><option value="high">High</option><option value="std">Standard</option></select></label>
 
   <button class="btn primary" data-act="print"><svg class="i" viewBox="0 0 24 24"><path d="M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2"/><path d="M7 14h10v6H7z"/></svg><span class="lbl-long">Save as PDF</span><span class="lbl-short">PDF</span></button>
   <button class="btn primary" data-act="jpeg" title="Save as a maximum-quality JPEG"><svg class="i" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4"/></svg><span class="lbl-long">Save as JPEG</span><span class="lbl-short">JPEG</span></button>
