@@ -795,7 +795,8 @@ async function renderPageCanvas(scale){
   const clone=page.cloneNode(true);
   clone.removeAttribute('id');
   clone.style.position='relative';clone.style.top='0';clone.style.left='0';clone.style.transform='none';clone.style.boxShadow='none';clone.style.margin='0';clone.style.width=w+'px';clone.style.height=h+'px';
-  const css=Array.from(document.querySelectorAll('style')).map(st=>st.textContent).join('\n');
+  clone.querySelectorAll('.swap').forEach(n=>n.classList.remove('swap'));
+  const css=Array.from(document.querySelectorAll('style')).map(st=>st.textContent).join('\n')+'\n*,*::before,*::after{animation:none!important;transition:none!important}';
   const body=new XMLSerializer().serializeToString(clone);
   const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+w*scale+'" height="'+h*scale+'" viewBox="0 0 '+w+' '+h+'">'+
     '<foreignObject width="'+w+'" height="'+h+'"><div xmlns="http://www.w3.org/1999/xhtml" style="width:'+w+'px;height:'+h+'px;background:#fff">'+
@@ -803,6 +804,17 @@ async function renderPageCanvas(scale){
   const url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
   const img=new Image(); img.decoding='sync';
   await new Promise((res,rej)=>{img.onload=res;img.onerror=()=>rej(new Error('render failed'));img.src=url});
+  // The fonts inside the SVG picture load a moment after the image does. Draw a small copy until it stops
+  // changing, so the final export never catches the page with missing or fallback fonts.
+  const probe=document.createElement('canvas'); probe.width=96; probe.height=136;
+  const pc=probe.getContext('2d',{willReadFrequently:true});
+  let last='', same=0;
+  for(let i=0;i<40&&same<3;i++){
+    pc.fillStyle='#fff'; pc.fillRect(0,0,96,136); pc.drawImage(img,0,0,96,136);
+    const d=pc.getImageData(0,0,96,136).data; let sum=0; for(let j=0;j<d.length;j+=7)sum=(sum*31+d[j])|0;
+    same=(String(sum)===last)?same+1:0; last=String(sum);
+    await new Promise(r=>setTimeout(r,i<2?250:120));
+  }
   const cv=document.createElement('canvas');
   cv.width=Math.round(w*scale); cv.height=Math.round(h*scale);
   const ctx=cv.getContext('2d');
